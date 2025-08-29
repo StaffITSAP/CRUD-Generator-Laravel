@@ -1,0 +1,25 @@
+<?php
+
+namespace Tests\Feature\Api\V1;
+
+use Tests\TestCase;
+use App\Models\User;
+use App\Models\{{model}};
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+class {{model}}ControllerTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_index_mengembalikan_pagination()
+    {
+        $user = User::factory()->create();
+        {{model}}::factory()->count(3)->create();
+
+        $res = $this->actingAs($user)
+            ->getJson('/api/{{version}}/{{route}}?per_page=2');
+
+        $res->assertOk()
+            ->assertJsonStructure(['data','links','meta']);
+    }
+}

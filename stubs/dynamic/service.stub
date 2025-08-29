@@ -1,0 +1,57 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\{{model}};
+use App\Exports\{{model}}Export;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Barryvdh\DomPDF\Facade\Pdf;
+
+class {{model}}Layanan
+{
+    public function __construct(protected {{model}} $m) {}
+
+    public function buat(array $data): {{model}}
+    {
+        return DB::transaction(fn()=> $this->m->create($data));
+    }
+
+    public function ubah($id, array $data): {{model}}
+    {
+        return DB::transaction(function() use($id,$data){
+            $row = $this->m->findOrFail($id);
+            $row->update($data);
+            return $row;
+        });
+    }
+
+    public function hapus($id): void
+    {
+        $row = $this->m->findOrFail($id);
+        $row->delete();
+    }
+
+    public function pulihkan($id): {{model}}
+    {
+        $row = $this->m->withTrashed()->findOrFail($id);
+        $row->restore();
+        return $row;
+    }
+
+    public function ekspor(Request $req, string $format)
+    {
+        $fname = strtolower('{{model}}_'.date('Ymd_His'));
+        if (in_array($format, ['csv','xlsx'])) {
+            return Excel::download(new {{model}}Export($req), "{$fname}.{$format}");
+        }
+        if ($format === 'pdf') {
+            $data = (new {{model}}Export($req))->query()->get();
+            $pdf = Pdf::loadView(config('generator.export.pdf_view'), ['data'=>$data]);
+            return $pdf->download("{$fname}.pdf");
+        }
+        return Response::json(['message'=>'Format tidak didukung'], 422);
+    }
+}

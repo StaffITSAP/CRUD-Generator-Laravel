@@ -1,0 +1,25 @@
+<?php
+
+namespace App\Repositories;
+
+use App\Models\{{model}};
+use Illuminate\Support\Facades\Schema;
+
+class {{model}}Repository
+{
+    public function model(): {{model}}
+    {
+        return new {{model}};
+    }
+
+    public function allowedColumns(): array
+    {
+        return Schema::getColumnListing('{{table}}');
+    }
+
+    public function relations(): array
+    {
+        // disiapkan dari generator (belongsTo dsb) – cukup nama method relasi di Model
+        return {{relations|json}};
+    }
+}

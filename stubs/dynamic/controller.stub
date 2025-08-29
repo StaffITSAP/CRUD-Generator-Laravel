@@ -1,0 +1,103 @@
+<?php
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\V1\Concerns\MenyusunQueryDinamis;
+use App\Http\Requests\{{model}}/Simpan{{model}}Request;
+use App\Http\Requests\{{model}}/Ubah{{model}}Request;
+use App\Http\Resources\{{model}}Resource;
+use App\Repositories\{{model}}Repository;
+use App\Services\{{model}}Layanan;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Response;
+
+class {{model}}Controller extends Controller
+{
+    use MenyusunQueryDinamis;
+
+    public function __construct(
+        protected {{model}}Repository $repo,
+        protected {{model}}Layanan $layanan
+    ) {
+        $this->middleware(['auth:sanctum','throttle:api-dinamis']);
+        $this->authorizeResource(\App\Models\{{model}}::class, '<?=strtolower('{{model}}')?>');
+    }
+
+    // GET /api/{{version}}/{{route}}
+    public function index(Request $request)
+    {
+        Log::info('Index {{model}}', ['user'=>Auth::id(),'q'=>$request->query()]);
+        $model = $this->repo->model();
+        $allowed = $this->repo->allowedColumns();
+        $relations = $this->repo->relations();
+
+        $q = $this->susunQuery($request, $model->newQuery(), $allowed, $relations);
+
+        $key = 'idx:{{model}}:'.md5($request->fullUrl().'|'.(Auth::id() ?? 'guest'));
+        $ttl = config('generator.cache_ttl',60);
+        $data = $this->cacheResult($key, $ttl, fn()=> $this->paginateDinamis($request, $q));
+
+        return {{model}}Resource::collection($data);
+    }
+
+    // GET /api/{{version}}/{{route}}/{id}
+    public function show(Request $request, $id)
+    {
+        $q = $this->repo->model()->newQuery();
+
+        if ($with = $request->query('include')) {
+            $with = array_intersect(
+                explode(',', $with),
+                array_map(fn($r)=>$r['name'], $this->repo->relations())
+            );
+            if ($with) $q->with($with);
+        }
+
+        $key = 'show:{{model}}:'.$id.':'.md5($request->fullUrl());
+        $ttl = config('generator.cache_ttl',60);
+        $item = $this->cacheResult($key, $ttl, fn()=> $q->findOrFail($id));
+
+        return new {{model}}Resource($item);
+    }
+
+    // POST /api/{{version}}/{{route}}
+    public function store(Simpan{{model}}Request $request)
+    {
+        $data = $this->layanan->buat($request->validated());
+        return (new {{model}}Resource($data))
+            ->additional(['message'=>'Data berhasil dibuat']);
+    }
+
+    // PUT/PATCH /api/{{version}}/{{route}}/{id}
+    public function update(Ubah{{model}}Request $request, $id)
+    {
+        $data = $this->layanan->ubah($id, $request->validated());
+        return (new {{model}}Resource($data))
+            ->additional(['message'=>'Data berhasil diubah']);
+    }
+
+    // DELETE /api/{{version}}/{{route}}/{id}
+    public function destroy($id)
+    {
+        $this->layanan->hapus($id);
+        return response()->json(['message'=>'Data berhasil dihapus']);
+    }
+
+    // PUT /api/{{version}}/{{route}}/{id}/restore
+    public function pulihkan($id)
+    {
+        $data = $this->layanan->pulihkan($id);
+        return (new {{model}}Resource($data))
+            ->additional(['message'=>'Data dipulihkan']);
+    }
+
+    // GET /api/{{version}}/{{route}}/export?format=csv|xlsx|pdf
+    public function export(Request $request)
+    {
+        $format = $request->query('format','csv');
+        return $this->layanan->ekspor($request, $format);
+    }
+}

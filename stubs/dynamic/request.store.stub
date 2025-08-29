@@ -1,0 +1,17 @@
+<?php
+
+namespace App\Http\Requests\{{model}};
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class Simpan{{model}}Request extends FormRequest
+{
+    public function authorize(): bool { return true; }
+
+    public function rules(): array
+    {
+        return [
+            // TODO: generator bisa auto-generate rule dasar dari tipe kolom
+        ];
+    }
+}
