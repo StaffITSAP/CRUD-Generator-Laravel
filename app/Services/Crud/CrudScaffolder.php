@@ -318,15 +318,17 @@ PHP;
     {
         return [
             'model'     => $model,
-            'var'       => Str::camel($model),
+            'var'       => \Illuminate\Support\Str::camel($model),
+            'param'     => \Illuminate\Support\Str::camel($model), // <-- tambahkan ini
             'table'     => $table,
-            'route'     => Str::kebab(Str::pluralStudly($model)),
+            'route'     => \Illuminate\Support\Str::kebab(\Illuminate\Support\Str::pluralStudly($model)),
             'version'   => config('generator.api_version', 'v1'),
             'columns'   => array_map(fn($c) => $c['name'], $columns),
             'relations' => $relations,
             'sensitive' => config('generator.sensitive', []),
         ];
     }
+
 
     /**
      * Tulis file dari stub.
