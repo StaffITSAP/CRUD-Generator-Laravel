@@ -30,8 +30,7 @@ class {{model}}Layanan
 
     public function hapus($id): void
     {
-        $row = $this->m->findOrFail($id);
-        $row->delete();
+        $this->m->findOrFail($id)->delete();
     }
 
     public function pulihkan($id): {{model}}
@@ -49,7 +48,7 @@ class {{model}}Layanan
         }
         if ($format === 'pdf') {
             $data = (new {{model}}Export($req))->query()->get();
-            $pdf = Pdf::loadView(config('generator.export.pdf_view'), ['data'=>$data]);
+            $pdf = Pdf::loadView(config('generator.export.pdf_view', 'exports.table'), ['data'=>$data]);
             return $pdf->download("{$fname}.pdf");
         }
         return Response::json(['message'=>'Format tidak didukung'], 422);

@@ -4,35 +4,26 @@ namespace App\Http\Controllers\Api\V1\Concerns;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Cache;
 
 trait MenyusunQueryDinamis
 {
     protected function susunQuery(Request $req, Builder $q, array $allowedColumns, array $relations = [])
     {
-        // Soft delete control
-        if ($req->boolean('with_trashed') && method_exists($q->getModel(), 'withTrashed')) {
-            $q->withTrashed();
-        }
-        if ($req->boolean('only_trashed') && method_exists($q->getModel(), 'onlyTrashed')) {
-            $q->onlyTrashed();
-        }
+        if ($req->boolean('with_trashed') && method_exists($q->getModel(),'withTrashed')) $q->withTrashed();
+        if ($req->boolean('only_trashed') && method_exists($q->getModel(),'onlyTrashed')) $q->onlyTrashed();
 
-        // Select fields
         if ($fields = $this->csv($req->query('fields'))) {
             $fields = array_values(array_intersect($fields, $allowedColumns));
             if ($fields) $q->select($fields);
         }
 
-        // Eager loading
         if ($with = $this->csv($req->query('include'))) {
             $valid = array_intersect($with, array_map(fn($r)=>$r['name'] ?? null, $relations));
             if ($valid) $q->with($valid);
         }
 
-        // Search (multi-field): search=keyword&search_fields=col1,col2
         if ($keyword = $req->query('search')) {
             $searchIn = $this->csv($req->query('search_fields')) ?: $allowedColumns;
             $searchIn = array_values(array_intersect($searchIn, $allowedColumns));
@@ -46,11 +37,10 @@ trait MenyusunQueryDinamis
             }
         }
 
-        // Filter (multi-field): ?filter[col]=val atau ?col=val
         $filters = (array) $req->query('filter', []);
         foreach ($req->query() as $k => $v) {
             if (in_array($k, ['page','per_page','limit','offset','sort','fields','include','search','search_fields','with_trashed','only_trashed'])) continue;
-            if (Str::endsWith($k, ['_from','_to'])) continue; // date range ditangani terpisah
+            if (Str::endsWith($k, ['_from','_to'])) continue;
             if (in_array($k, $allowedColumns)) $filters[$k] = $v;
         }
         foreach ($filters as $col => $val) {
@@ -59,7 +49,6 @@ trait MenyusunQueryDinamis
             }
         }
 
-        // Date range: ?created_at_from=...&created_at_to=...
         foreach ($allowedColumns as $col) {
             $from = $req->query("{$col}_from");
             $to   = $req->query("{$col}_to");
@@ -69,14 +58,11 @@ trait MenyusunQueryDinamis
             }
         }
 
-        // Sorting: sort=col1,-col2
         if ($sort = $this->csv($req->query('sort'))) {
             foreach ($sort as $s) {
                 $dir = Str::startsWith($s, '-') ? 'desc' : 'asc';
                 $col = ltrim($s, '-');
-                if (in_array($col, $allowedColumns)) {
-                    $q->orderBy($col, $dir);
-                }
+                if (in_array($col, $allowedColumns)) $q->orderBy($col, $dir);
             }
         }
 
@@ -85,11 +71,10 @@ trait MenyusunQueryDinamis
 
     protected function paginateDinamis(Request $req, Builder $q)
     {
-        // Dukung page+per_page atau limit+offset
-        $limit = (int) $req->integer('per_page') ?: (int) $req->integer('limit') ?: 15;
+        $limit = (int) ($req->integer('per_page') ?: $req->integer('limit') ?: 15);
         $offset = (int) $req->integer('offset');
         if ($offset) {
-            $page = floor($offset / max(1,$limit)) + 1;
+            $page = (int) floor($offset / max(1,$limit)) + 1;
             return $q->paginate($limit, ['*'], 'page', $page)->withQueryString();
         }
         return $q->paginate($limit)->withQueryString();
@@ -102,7 +87,7 @@ trait MenyusunQueryDinamis
 
     private function csv(?string $s): array
     {
-        if (! $s) return [];
+        if (!$s) return [];
         return array_values(array_filter(array_map('trim', explode(',', $s))));
     }
 }

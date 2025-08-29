@@ -1,0 +1,17 @@
+<?php
+
+namespace App\Policies;
+
+use App\Models\User;
+use App\Models\{{model}};
+
+class {{model}}Policy
+{
+    public function viewAny(User $user): bool { return true; }
+    public function view(User $user, {{model}} $m): bool { return true; }
+    public function create(User $user): bool { return $user->hasRole('admin') || $user->can('create {{route}}'); }
+    public function update(User $user, {{model}} $m): bool { return $user->hasRole('admin') || $user->can('update {{route}}'); }
+    public function delete(User $user, {{model}} $m): bool { return $user->hasRole('admin') || $user->can('delete {{route}}'); }
+    public function restore(User $user, {{model}} $m): bool { return $user->hasRole('admin'); }
+    public function forceDelete(User $user, {{model}} $m): bool { return false; }
+}

@@ -5,6 +5,7 @@ namespace App\Exports;
 use App\Http\Controllers\Api\V1\Concerns\MenyusunQueryDinamis;
 use App\Models\{{model}};
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 
@@ -17,14 +18,13 @@ class {{model}}Export implements FromQuery, WithHeadings
     public function query()
     {
         $m = new {{model}};
-        $allowed = \Illuminate\Support\Facades\Schema::getColumnListing($m->getTable());
-        $q = $this->susunQuery($this->req, $m->newQuery(), $allowed, []);
-        return $q;
+        $allowed = Schema::getColumnListing($m->getTable());
+        return $this->susunQuery($this->req, $m->newQuery(), $allowed, []);
     }
 
     public function headings(): array
     {
         $m = new {{model}};
-        return \Illuminate\Support\Facades\Schema::getColumnListing($m->getTable());
+        return Schema::getColumnListing($m->getTable());
     }
 }

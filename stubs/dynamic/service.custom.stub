@@ -4,5 +4,5 @@ namespace App\Services;
 
 class {{model}}LayananKustom
 {
-    // Tambahkan fungsi2 kustom berbahasa Indonesia di sini
+    // Tambahkan fungsi2 kustom di sini (berbahasa Indonesia)
 }

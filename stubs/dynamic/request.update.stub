@@ -4,7 +4,7 @@ namespace App\Http\Requests\{{model}};
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class Simpan{{model}}Request extends FormRequest
+class Ubah{{model}}Request extends FormRequest
 {
     public function authorize(): bool
     {

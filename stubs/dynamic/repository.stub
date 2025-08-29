@@ -19,7 +19,6 @@ class {{model}}Repository
 
     public function relations(): array
     {
-        // disiapkan dari generator (belongsTo dsb) – cukup nama method relasi di Model
-        return {{relations|json}};
+        return {{relations_json}};
     }
 }
