@@ -40,7 +40,8 @@ Generator otomatis untuk membuat **CRUD Restful API** berbasis **Laravel 12**, d
    php artisan install:api
    composer require laravel/sanctum
    composer require spatie/laravel-permission
-   composer require maatwebsite/excel:^3.1
+   composer require doctrine/dbal
+   composer require maatwebsite/excel
    composer require barryvdh/laravel-dompdf
    composer require laravel/telescope --dev
    ```
