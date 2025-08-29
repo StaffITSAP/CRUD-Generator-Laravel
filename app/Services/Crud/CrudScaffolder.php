@@ -49,26 +49,24 @@ class CrudScaffolder
     /**
      * Ambil SchemaManager dengan API modern (DBAL 3/4) atau fallback.
      */
-    protected function getSchemaManager()
+    protected function getSchemaManager(): ?object
     {
-        /** @var Connection $conn */
+        /** @var \Illuminate\Database\Connection $conn */
         $conn = DB::connection();
 
-        // Laravel 10/11/12 biasanya expose doctrine connection di bawah ini:
-        $doctrine = $conn->getDoctrineConnection();
-
-        // DBAL >= 3.2
-        if (method_exists($doctrine, 'createSchemaManager')) {
-            return $doctrine->createSchemaManager();
+        // Jika doctrine tersedia, gunakan itu
+        if (method_exists($conn, 'getDoctrineConnection')) {
+            $doctrine = $conn->getDoctrineConnection();
+            if (method_exists($doctrine, 'createSchemaManager')) {
+                return $doctrine->createSchemaManager(); // DBAL 3/4
+            }
+            if (method_exists($conn, 'getDoctrineSchemaManager')) {
+                return $conn->getDoctrineSchemaManager(); // fallback lama
+            }
         }
 
-        // Laravel helper lama
-        if (method_exists($conn, 'getDoctrineSchemaManager')) {
-            return $conn->getDoctrineSchemaManager();
-        }
-
-        // Fallback terakhir (harusnya tidak sampai)
-        return $doctrine->getSchemaManager();
+        // Tidak ada doctrine → pakai fallback (return null)
+        return null;
     }
 
     /**
@@ -76,18 +74,88 @@ class CrudScaffolder
      */
     protected function describeTable($schemaManager, string $table): array
     {
-        // DBAL 3/4: listTableColumns($tableName)
+        // Jika doctrine ada, gunakan listTableColumns
+        if ($schemaManager !== null && method_exists($schemaManager, 'listTableColumns')) {
+            $cols = [];
+            foreach ($schemaManager->listTableColumns($table) as $col) {
+                $cols[] = [
+                    'name'    => $col->getName(),
+                    'type'    => (string) $col->getType(),
+                    'notnull' => $col->getNotnull(),
+                    'default' => $col->getDefault(),
+                ];
+            }
+            return $cols;
+        }
+
+        // Fallback MySQL: pakai INFORMATION_SCHEMA
+        return $this->mysqlColumns($table);
+    }
+
+    /**
+     * Ambil deskripsi kolom dari INFORMATION_SCHEMA (MySQL).
+     */
+    protected function mysqlColumns(string $table): array
+    {
+        $database = DB::getDatabaseName();
+
+        $rows = DB::select("
+        SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+        ORDER BY ORDINAL_POSITION
+    ", [$database, $table]);
+
         $cols = [];
-        foreach ($schemaManager->listTableColumns($table) as $col) {
-            $type = (string) $col->getType();
+        foreach ($rows as $r) {
             $cols[] = [
-                'name'    => $col->getName(),
-                'type'    => $type,
-                'notnull' => $col->getNotnull(),
-                'default' => $col->getDefault(),
+                'name'    => $r->COLUMN_NAME,
+                'type'    => (string) $r->DATA_TYPE,
+                'notnull' => strtoupper($r->IS_NULLABLE) === 'NO',
+                'default' => $r->COLUMN_DEFAULT,
             ];
         }
         return $cols;
+    }
+
+    /**
+     * Ambil foreign key dari INFORMATION_SCHEMA (MySQL) dan mapping ke belongsTo.
+     */
+    protected function mysqlForeignKeys(string $table): array
+    {
+        $database = DB::getDatabaseName();
+
+        $rows = DB::select("
+        SELECT
+            kcu.COLUMN_NAME          AS local_column,
+            kcu.REFERENCED_TABLE_NAME AS referenced_table
+        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+        WHERE
+            kcu.TABLE_SCHEMA = ?
+            AND kcu.TABLE_NAME = ?
+            AND kcu.REFERENCED_TABLE_NAME IS NOT NULL
+        ORDER BY kcu.ORDINAL_POSITION
+    ", [$database, $table]);
+
+        $rels = [];
+        foreach ($rows as $r) {
+            $col  = $r->local_column;
+            $fTbl = $r->referenced_table;
+
+            $base    = \Illuminate\Support\Str::before($col, '_id');
+            $relName = \Illuminate\Support\Str::camel($base ?: $col);
+            $model   = \Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular($fTbl));
+
+            $rels[] = [
+                'type'          => 'belongsTo',
+                'name'          => $relName,
+                'model'         => $model,
+                'foreign_table' => $fTbl,
+                'local_key'     => $col,
+            ];
+        }
+
+        return $rels;
     }
 
     /**
@@ -95,30 +163,47 @@ class CrudScaffolder
      */
     protected function detectRelations($schemaManager, string $table): array
     {
-        $rels = [];
-        // DBAL 3/4: listTableForeignKeys($tableName)
-        foreach ($schemaManager->listTableForeignKeys($table) as $fk) {
-            // Ambil nama kolom lokal (referencing columns) dengan helper kompatibel
-            $localCols = $this->fkGetLocalColumns($fk);
-            // Ambil nama tabel referensi (referenced table) dengan helper kompatibel
-            $foreignTable = $this->fkGetForeignTableName($fk);
+        // Doctrine tersedia → gunakan listTableForeignKeys
+        if ($schemaManager !== null && method_exists($schemaManager, 'listTableForeignKeys')) {
+            $rels = [];
+            foreach ($schemaManager->listTableForeignKeys($table) as $fk) {
+                $localCols = method_exists($fk, 'getUnquotedLocalColumns')
+                    ? $fk->getUnquotedLocalColumns()
+                    : (method_exists($fk, 'getLocalColumns') ? $fk->getLocalColumns() : []);
 
-            foreach ($localCols as $col) {
-                $base = Str::before($col, '_id');
-                $relName = Str::camel($base ?: $col);
-                $model   = Str::studly(Str::singular($foreignTable));
+                $foreignTable = '';
+                if (method_exists($fk, 'getUnqualifiedForeignTableName')) {
+                    $foreignTable = $fk->getUnqualifiedForeignTableName();
+                } elseif (method_exists($fk, 'getForeignTableName')) {
+                    $foreignTable = $fk->getForeignTableName();
+                } elseif (method_exists($fk, 'getForeignTable')) {
+                    $tblObj = $fk->getForeignTable();
+                    if (is_object($tblObj)) {
+                        $foreignTable = method_exists($tblObj, 'getName') ? $tblObj->getName() : (string) $tblObj;
+                    }
+                }
 
-                $rels[] = [
-                    'type'          => 'belongsTo',
-                    'name'          => $relName,
-                    'model'         => $model,
-                    'foreign_table' => $foreignTable,
-                    'local_key'     => $col,
-                ];
+                foreach ($localCols as $col) {
+                    $base    = \Illuminate\Support\Str::before($col, '_id');
+                    $relName = \Illuminate\Support\Str::camel($base ?: $col);
+                    $model   = \Illuminate\Support\Str::studly(\Illuminate\Support\Str::singular($foreignTable));
+
+                    $rels[] = [
+                        'type'          => 'belongsTo',
+                        'name'          => $relName,
+                        'model'         => $model,
+                        'foreign_table' => $foreignTable,
+                        'local_key'     => $col,
+                    ];
+                }
             }
+            return $rels;
         }
-        return $rels;
+
+        // Fallback MySQL
+        return $this->mysqlForeignKeys($table);
     }
+
 
     /**
      * Helper kompatibel: ambil kolom lokal FK tanpa trigger deprecation.
