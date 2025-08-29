@@ -2,35 +2,23 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Seeder;
+use App\Models\User;
 
 class UserSeeder extends Seeder
 {
     public function run(): void
     {
-        // Admin default
         $admin = User::firstOrCreate(
             ['email' => 'admin@example.com'],
-            [
-                'name'              => 'Administrator',
-                'username'          => 'admin',
-                'password'          => bcrypt('password'), // ganti di production
-                'email_verified_at' => now(),
-            ]
+            ['name' => 'Administrator', 'username' => 'admin', 'password' => bcrypt('password'), 'email_verified_at' => now()]
         );
-        $admin->assignRole('admin');
+        $admin->assignRole('admin'); // guard web
 
-        // User biasa contoh
-        $user = User::firstOrCreate(
+        $viewer = User::firstOrCreate(
             ['email' => 'user@example.com'],
-            [
-                'name'              => 'User Biasa',
-                'username'          => 'user',
-                'password'          => bcrypt('password'),
-                'email_verified_at' => now(),
-            ]
+            ['name' => 'User Biasa', 'username' => 'user', 'password' => bcrypt('password'), 'email_verified_at' => now()]
         );
-        $user->assignRole('user');
+        $viewer->assignRole('user'); // guard web
     }
 }

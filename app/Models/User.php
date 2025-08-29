@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class User extends Authenticatable
 {
     use HasApiTokens, Notifiable, HasRoles, SoftDeletes, HasFactory;
-
+    protected $guard_name = 'web';
     protected $fillable = [
         'name',
         'username',
