@@ -8,6 +8,9 @@ use Illuminate\Support\Str;
 
 /**
  * CRUD Scaffolder kompatibel Doctrine DBAL (jika ada) + fallback MySQL INFORMATION_SCHEMA.
+ * - Tanpa named args (compatible PHP 8.x)
+ * - Repository menulis relasi sebagai array PHP (bukan JSON)
+ * - Request rules otomatis dari tipe kolom migrasi
  */
 class CrudScaffolder
 {
@@ -25,14 +28,21 @@ class CrudScaffolder
         // Context untuk stub
         $ctx = $this->context($model, $table, $columns, $relations);
 
-        // Tulis file dari stub (tanpa named args agar aman untuk semua versi PHP 8.x)
+        // ===== Tulis file dari stub =====
         $this->putFromStub('resource.stub',       "app/Http/Resources/{$model}Resource.php", $ctx);
-        $this->putFromStub('request.store.stub',  "app/Http/Requests/{$model}/Simpan{$model}Request.php", $ctx);
-        $this->putFromStub('request.update.stub', "app/Http/Requests/{$model}/Ubah{$model}Request.php", $ctx);
 
-        // repository: ganti token JSON relations dulu
-        $this->putFromStub('repository.stub', "app/Repositories/{$model}Repository.php", $ctx, function ($tpl) use ($relations) {
-            return str_replace('{{relations_json}}', json_encode($relations, JSON_UNESCAPED_SLASHES), $tpl);
+        // Request (auto rules)
+        $this->putFromStub('request.store.stub',  "app/Http/Requests/{$model}/Simpan{$model}Request.php", $ctx, function ($tpl) use ($columns) {
+            return str_replace('{{rules_store}}', $this->buildRulesStore($columns), $tpl);
+        });
+        $this->putFromStub('request.update.stub', "app/Http/Requests/{$model}/Ubah{$model}Request.php",   $ctx, function ($tpl) use ($columns) {
+            return str_replace('{{rules_update}}', $this->buildRulesUpdate($columns), $tpl);
+        });
+
+        // Repository (embed array PHP)
+        $this->putFromStub('repository.stub', "app/Repositories/{$model}Repository.php", $ctx, function ($tpl) use ($relations, $table) {
+            $tpl = str_replace('{{relations_array}}', var_export($relations, true), $tpl);
+            return str_replace('{{table}}', $table, $tpl);
         });
 
         $this->putFromStub('service.stub',        "app/Services/{$model}Layanan.php", $ctx);
@@ -223,7 +233,7 @@ class CrudScaffolder
             $n = $c['name'];
             if (str_contains($t, 'int')) $casts[$n] = 'integer';
             elseif (str_contains($t, 'bool')) $casts[$n] = 'boolean';
-            elseif (str_contains($t, 'datetime') || $n === 'email_verified_at') $casts[$n] = 'datetime';
+            elseif (str_contains($t, 'datetime') || $n === 'email_verified_at' || $t === 'timestamp' || $t === 'date') $casts[$n] = 'datetime';
             elseif (str_contains($t, 'json')) $casts[$n] = 'array';
             elseif (str_contains($t, 'decimal') || str_contains($t, 'float') || str_contains($t, 'double') || str_contains($t, 'real')) $casts[$n] = 'float';
         }
@@ -299,7 +309,7 @@ PHP;
 
     protected function render(string $tpl, array $ctx): string
     {
-        // render {{key}} saja (token {{relations_json}} sudah diganti manual)
+        // render {{key}} saja (token rules/relations sudah diganti via mutator)
         return preg_replace_callback('/\{\{\s*(\w+)\s*\}\}/', function ($m) use ($ctx) {
             return $ctx[$m[1]] ?? '';
         }, $tpl);
@@ -328,5 +338,79 @@ PHP;
             $content = str_replace($marker, $line . $marker, $content);
             file_put_contents($routeFile, $content);
         }
+    }
+
+    // ===================== Helpers: Validation Rules =====================
+
+    protected function buildRulesStore(array $columns): string
+    {
+        $rules = $this->makeRules($columns, true);
+        return $this->rulesToPhpArray($rules);
+        // menghasilkan string seperti: "'name' => ['required','string','max:255'],\n 'price' => ['required','numeric']"
+    }
+
+    protected function buildRulesUpdate(array $columns): string
+    {
+        $rules = $this->makeRules($columns, false);
+        return $this->rulesToPhpArray($rules);
+    }
+
+    protected function makeRules(array $columns, bool $isStore): array
+    {
+        $excluded = ['id', 'created_at', 'updated_at', 'deleted_at', 'remember_token'];
+        $out = [];
+        foreach ($columns as $c) {
+            $name = $c['name'];
+            if (in_array($name, $excluded)) continue;
+
+            $type = strtolower((string) $c['type']);
+            $notnull = (bool) $c['notnull'];
+            $hasDefault = !is_null($c['default']);
+
+            $r = [];
+
+            if ($isStore) {
+                if ($notnull && !$hasDefault) {
+                    $r[] = 'required';
+                } else {
+                    $r[] = 'nullable';
+                }
+            } else {
+                $r[] = 'sometimes';
+            }
+
+            // tipe dasar
+            if (str_contains($type, 'int')) {
+                $r[] = 'integer';
+            } elseif ($type === 'boolean' || $type === 'tinyint' || $type === 'bool') {
+                $r[] = 'boolean';
+            } elseif (in_array($type, ['decimal', 'float', 'double', 'real', 'numeric'])) {
+                $r[] = 'numeric';
+            } elseif (in_array($type, ['date', 'datetime', 'timestamp'])) {
+                $r[] = 'date';
+            } elseif ($type === 'json') {
+                $r[] = 'array';
+            } else {
+                $r[] = 'string';
+                // opsional: max 255 utk nama umum
+                if (preg_match('/name|title|slug|email|username/i', $name)) {
+                    $r[] = 'max:255';
+                }
+            }
+
+            $out[$name] = $r;
+        }
+        return $out;
+    }
+
+    protected function rulesToPhpArray(array $rules): string
+    {
+        // Ubah ke string PHP array untuk disuntikkan ke stub
+        $lines = [];
+        foreach ($rules as $field => $arr) {
+            $arrPhp = implode("','", array_map(fn($s) => str_replace("'", "\\'", $s), $arr));
+            $lines[] = "            '{$field}' => ['{$arrPhp}'],";
+        }
+        return implode("\n", $lines);
     }
 }

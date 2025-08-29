@@ -8,13 +8,13 @@ class Ubah{{model}}Request extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return true; // diatur via Policy + middleware
     }
 
     public function rules(): array
     {
         return [
-            // TODO: otomatisasi rule dari tipe kolom (opsional)
+{{rules_update}}
         ];
     }
 }

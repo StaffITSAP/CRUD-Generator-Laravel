@@ -19,6 +19,6 @@ class {{model}}Repository
 
     public function relations(): array
     {
-        return {{relations_json}};
+        return {{relations_array}};
     }
 }
