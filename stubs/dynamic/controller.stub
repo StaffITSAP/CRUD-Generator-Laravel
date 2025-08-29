@@ -4,15 +4,14 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\V1\Concerns\MenyusunQueryDinamis;
-use App\Http\Requests\{{model}}/Simpan{{model}}Request;
-use App\Http\Requests\{{model}}/Ubah{{model}}Request;
+use App\Http\Requests\{{model}}\Simpan{{model}}Request;
+use App\Http\Requests\{{model}}\Ubah{{model}}Request;
 use App\Http\Resources\{{model}}Resource;
 use App\Repositories\{{model}}Repository;
 use App\Services\{{model}}Layanan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Response;
 
 class {{model}}Controller extends Controller
 {
@@ -23,7 +22,7 @@ class {{model}}Controller extends Controller
         protected {{model}}Layanan $layanan
     ) {
         $this->middleware(['auth:sanctum','throttle:api-dinamis']);
-        $this->authorizeResource(\App\Models\{{model}}::class, '<?=strtolower('{{model}}')?>');
+        $this->authorizeResource(\App\Models\{{model}}::class, '{{param}}');
     }
 
     // GET /api/{{version}}/{{route}}
@@ -37,7 +36,7 @@ class {{model}}Controller extends Controller
         $q = $this->susunQuery($request, $model->newQuery(), $allowed, $relations);
 
         $key = 'idx:{{model}}:'.md5($request->fullUrl().'|'.(Auth::id() ?? 'guest'));
-        $ttl = config('generator.cache_ttl',60);
+        $ttl = (int) config('generator.cache_ttl',60);
         $data = $this->cacheResult($key, $ttl, fn()=> $this->paginateDinamis($request, $q));
 
         return {{model}}Resource::collection($data);
@@ -57,7 +56,7 @@ class {{model}}Controller extends Controller
         }
 
         $key = 'show:{{model}}:'.$id.':'.md5($request->fullUrl());
-        $ttl = config('generator.cache_ttl',60);
+        $ttl = (int) config('generator.cache_ttl',60);
         $item = $this->cacheResult($key, $ttl, fn()=> $q->findOrFail($id));
 
         return new {{model}}Resource($item);
