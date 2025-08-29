@@ -13,12 +13,25 @@ return new class extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
+
+            // Nama & Username
             $table->string('name');
+            $table->string('username')->unique()->nullable(); // bisa login pakai username
             $table->string('email')->unique();
-            $table->timestamp('email_verified_at')->nullable();
+
+            // Security
             $table->string('password');
+            $table->timestamp('email_verified_at')->nullable();
+
+            // Sanctum token helper
             $table->rememberToken();
+
+            // Soft delete & timestamp
+            $table->softDeletes();
             $table->timestamps();
+
+            // Index tambahan untuk pencarian cepat
+            $table->index(['username', 'email']);
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {
