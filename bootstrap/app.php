@@ -22,18 +22,4 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions) {
         //
     })
-    ->withBoot(function () {
-        // Rate limit per user (fallback IP)
-        RateLimiter::for('api-dinamis', function (Request $request) {
-            $key = $request->user()?->id ?: $request->ip();
-            return [
-                Limit::perMinute(120)->by($key), // ganti sesuai kebutuhan
-                Limit::perMinute(60)->by($key . '-exports')->response(function () {
-                    return response()->json([
-                        'message' => 'Terlalu banyak request export, coba lagi nanti.'
-                    ], 429);
-                }),
-            ];
-        });
-    })
     ->create();
